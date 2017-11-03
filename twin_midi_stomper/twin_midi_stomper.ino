@@ -67,9 +67,10 @@ void loop() {
 
   if ((button0.fell() && !button1.read()) || (button1.fell() && !button0.read())) {
     Serial.println("reprogramPitches");
+    noteOff(buttonSetting0);
+    noteOff(buttonSetting1);
     reprogramPitches();
     Serial.println("reprogramPitches done");
-    printStatus();
   } else {
     if (button0.fell()) {
       noteOn(buttonSetting0);
@@ -83,25 +84,21 @@ void loop() {
       noteOff(buttonSetting1);
     }
   }
-
-  clearBuffer();
-  MidiUSB.flush();
 }
 
 void reprogramPitches() {
+  clearBuffer();
   midiEventPacket_t packet0 = waitForPacket();
   midiEventPacket_t packet1 = waitForPacket();
-  //  if (packet0.header != 0 && packet1.header != 0) {
-  //    buttonSetting0.channel = packet0.byte1 | 0x0011;
-  //    buttonSetting0.pitch = packet0.byte2;
-  //    buttonSetting1.channel = packet1.byte1 | 0x0011;
-  //    buttonSetting1.pitch = packet1.byte2;
-  //  }
+      buttonSetting0.channel = packet0.byte1 & 0x0F;
+      buttonSetting0.pitch = packet0.byte2;
+      buttonSetting1.channel = packet1.byte1 & 0x0F;
+      buttonSetting1.pitch = packet1.byte2;
 }
 
 midiEventPacket_t waitForPacket() {
   midiEventPacket_t rx;
-  while (rx.header == 0 && (rx.byte1 & 0xF0) != MIDI_NOTE_ON) {
+  while (rx.header == 0 || (rx.byte1 & 0xF0) != MIDI_NOTE_ON || rx.byte3 == 0x00) {
     rx = MidiUSB.read();
   }
   Serial.println("waitForPacket()   byte1: 0x" + String(rx.byte1, HEX));
@@ -111,10 +108,11 @@ midiEventPacket_t waitForPacket() {
 }
 
 void clearBuffer() {
-  midiEventPacket_t rx;
-  do {
-    rx = MidiUSB.read();
-  } while (rx.header != 0);
+  unsigned long loops = 0;
+  while (MidiUSB.read().header != 0) {
+    loops++;
+  }
+  Serial.println("clearBuffer() loops:" + String(loops));
 }
 
 void noteOn(ButtonSetting buttonSetting) {
@@ -124,6 +122,7 @@ void noteOn(ButtonSetting buttonSetting) {
   noteOnPacket.byte2 = buttonSetting.pitch;
   noteOnPacket.byte3 = MIDI_NOTE_ON_VELOCITY;
   MidiUSB.sendMIDI(noteOnPacket);
+  MidiUSB.flush();
 }
 
 void noteOff(ButtonSetting buttonSetting) {
@@ -133,5 +132,6 @@ void noteOff(ButtonSetting buttonSetting) {
   noteOffPacket.byte2 = buttonSetting.pitch;
   noteOffPacket.byte3 = MIDI_NOTE_OFF_VELOCITY;
   MidiUSB.sendMIDI(noteOffPacket);
+  MidiUSB.flush();
 }
 
