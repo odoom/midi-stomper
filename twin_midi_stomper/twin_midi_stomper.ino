@@ -173,7 +173,7 @@ void waitForPackets(midiEventPacket_t packets[]) {
   do {
     delay(5);
     midiEventPacket_t rx = MidiUSB.read();
-    if (rx.header != 0 && (rx.byte1 & 0xF0) == MIDI_NOTE_ON && (rx.byte1 & 0x0F) < 16 && rx.byte3 != 0x00 && rx.byte3 < 128) {
+    if (rx.header != 0 && (rx.byte1 & 0xF0) == MIDI_NOTE_ON && (rx.byte1 & 0x0F) < 16 && rx.byte3 != 0x00 && rx.byte2 < 128) {
       packets[index] = rx;
       index++;
     }
