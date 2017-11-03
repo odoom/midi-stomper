@@ -18,7 +18,7 @@ typedef struct
 {
   uint8_t channel;
   uint8_t pitch;
-}ButtonSetting;
+} ButtonSetting;
 
 // Buttons
 Bounce button0 = Bounce();
@@ -28,6 +28,10 @@ ButtonSetting buttonSetting0;
 ButtonSetting buttonSetting1;
 
 void setup() {
+  Serial.begin(115200);
+  while (!Serial) {
+    ;
+  }
   pinMode(2, INPUT_PULLUP);
   button0.attach(2);
   button1.interval(1);
@@ -37,17 +41,33 @@ void setup() {
   button1.interval(1);
 
   buttonSetting0.channel = CHANNEL;
-  buttonSetting0.channel = BUTTON0_PITCH;
   buttonSetting1.channel = CHANNEL;
-  buttonSetting1.channel = BUTTON1_PITCH;
+  buttonSetting0.pitch = BUTTON0_PITCH;
+  buttonSetting1.pitch = BUTTON1_PITCH;
+
+  Serial.println("Setup Complete");
+  printStatus();
 }
+
+void printStatus() {
+  Serial.println("buttonSetting0.channel:" + String(buttonSetting0.channel));
+  Serial.println("buttonSetting0.pitch:" + String(buttonSetting0.pitch));
+  Serial.println("buttonSetting1.channel:" + String(buttonSetting1.channel));
+  Serial.println("buttonSetting1.pitch:" + String(buttonSetting1.pitch));
+  Serial.println("button0.read():" + String(button0.read()));
+  Serial.println("button1.read():" + String(button1.read()));
+}
+
 
 void loop() {
   button0.update();
   button1.update();
 
-  if (button0.fell() && button1.fell()) {
+  if ((button0.fell() && !button1.read()) || (button1.fell() && !button0.read())) {
+    Serial.println("reprogramPitches");
     reprogramPitches();
+    Serial.println("reprogramPitches done");
+    printStatus();
   } else {
     if (button0.fell()) {
       noteOn(buttonSetting0);
@@ -78,11 +98,14 @@ void reprogramPitches() {
 }
 
 midiEventPacket_t waitForPacket() {
-  unsigned long start = millis();
   midiEventPacket_t rx;
-  do {
+  Serial.println("waitForPacket() entry rx.header:" + String(rx.header));
+  while (rx.header == 0) {
     rx = MidiUSB.read();
-  } while (rx.header != 0 && (millis() - start) < 10000);
+  }
+  Serial.println("rx.header USB_CABLE_NUMBER:" + String(rx.header | USB_CABLE_NUMBER, HEX));
+  Serial.println("rx.header MIDI_NOTE_ON:" + String(rx.header | MIDI_NOTE_ON, HEX));
+  Serial.println("waitForPacket() return rx.header:" + String(rx.header, HEX));
   return rx;
 }
 
