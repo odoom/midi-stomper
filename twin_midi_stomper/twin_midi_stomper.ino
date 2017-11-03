@@ -1,67 +1,208 @@
+
 #include <Bounce2.h>
+#include <EEPROM.h>
 #include <MIDIUSB.h>
 #include "pitchToNote.h"
 
-// Configuration
 const uint8_t CHANNEL = 10 - 1;
-const uint8_t BUTTON1_PITCH = pitchD2b;
-const uint8_t BUTTON2_PITCH = pitchD2;
-
-// Less common configuration
+const uint8_t BUTTON_0_PITCH = pitchC2;
 const uint8_t MIDI_NOTE_ON_VELOCITY = 0x7F;
 const uint8_t MIDI_NOTE_OFF_VELOCITY = 0x00;
 const uint8_t MIDI_NOTE_ON = 0x90;
 const uint8_t MIDI_NOTE_OFF = 0x80;
 const uint8_t USB_CABLE_NUMBER = 0x00;
+const uint8_t NUMBER_OF_BUTTONS = 2;
+const uint8_t FIRST_PIN = 2;
 
-// Buttons
-Bounce button1 = Bounce();
-Bounce button2 = Bounce();
+typedef struct
+{
+  uint8_t channel;
+  uint8_t pitch;
+} ButtonSetting;
+
+Bounce buttons[NUMBER_OF_BUTTONS];
+ButtonSetting buttonSettings[NUMBER_OF_BUTTONS];
+unsigned long holdStart = 0;
+bool firstLoop = true;
 
 void setup() {
-  pinMode(2, INPUT_PULLUP);
-  button1.attach(2);
-  button2.interval(1);
+  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    pinMode(i + FIRST_PIN, INPUT_PULLUP);
+    buttons[i] = Bounce();
+    buttons[i].attach(i + FIRST_PIN);
+    buttons[i].interval(1);
+  }
 
-  pinMode(3, INPUT_PULLUP);
-  button2.attach(3);
-  button2.interval(1);
+  loadFromEEPROM();
+  if (!validSettings()) {
+    resetToDefault();
+  }
+}
+
+void updateButtons() {
+  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    buttons[i].update();
+  }
+}
+
+bool allButtonsLow() {
+  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    if (buttons[i].read()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void loadFromEEPROM() {
+  int location = 0;
+  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    EEPROM.get(location, buttonSettings[i]);
+    location += sizeof(buttonSettings[0]);
+  }
+}
+
+bool validSettings() {
+  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    if (buttonSettings[i].channel > 16 || buttonSettings[i].pitch > 127) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void resetToDefault() {
+  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    buttonSettings[i].channel = CHANNEL;
+    buttonSettings[i].pitch = BUTTON_0_PITCH + i;
+  }
+}
+
+void saveButtonSettings() {
+  int location = 0;
+  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    EEPROM.put(location, buttonSettings[i]);
+    location += sizeof(buttonSettings[0]);
+  }
 }
 
 void loop() {
-  button1.update();
-  button2.update();
+  updateButtons();
 
-  if (button1.fell()) {
-    noteOn(BUTTON1_PITCH);
-  } else if (button1.rose()) {
-    noteOff(BUTTON1_PITCH);
+  if (firstLoop && allButtonsLow()) {
+    resetToDefault();
+    saveButtonSettings();
+    while (allButtonsLow()) {
+      updateButtons();
+      delay(100);
+    }
+  } else {
+    if (allButtonsLow()) {
+      if (holdStart == 0) {
+        //start waiting
+        holdStart = millis();
+      } else if ((millis() - holdStart) > 2000) {
+        // waited long enough
+        holdStart = 0;
+        reprogramButtons();
+      } else {
+        // wait longer
+      }
+    } else {
+      // set counter to 0, not all buttons pressed
+      holdStart = 0;
+    }
+
+    for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+      if (buttons[i].fell()) {
+        noteOn(buttonSettings[i]);
+      } else if (buttons[i].rose()) {
+        noteOff(buttonSettings[i]);
+      }
+    }
   }
 
-  if (button2.fell()) {
-    noteOn(BUTTON2_PITCH);
-  } else if (button2.rose()) {
-    noteOff(BUTTON2_PITCH);
-  }
+  firstLoop = false;
+  clearBuffer();
+}
 
+void reprogramButtons() {
+  midiEventPacket_t packets[NUMBER_OF_BUTTONS];
+  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    noteOff(buttonSettings[i]);
+    packets[i].header = 0;
+  }
+  clearBuffer();
+  waitForPackets(packets);
+  if (allPacketsHaveNonZeroHeader(packets)) {
+    copyToSettings(packets);
+    saveButtonSettings();
+  }
+  playTestNotes();
+}
+
+void copyToSettings(midiEventPacket_t packets[]) {
+  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    buttonSettings[i].channel = packets[i].byte1 & 0x0F;
+    buttonSettings[i].pitch = packets[i].byte2;
+  }
+}
+
+void playTestNotes() {
+  delay(500);
+  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    noteOn(buttonSettings[i]);
+    delay(250);
+  }
+  delay(250);
+}
+
+bool allPacketsHaveNonZeroHeader(midiEventPacket_t packets[]) {
+  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    if (packets[i].header == 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void waitForPackets(midiEventPacket_t packets[]) {
+  unsigned long start = millis();
+  delay(5);
+  uint8_t index = 0;
+  do {
+    delay(5);
+    midiEventPacket_t rx = MidiUSB.read();
+    if (rx.header != 0 && (rx.byte1 & 0xF0) == MIDI_NOTE_ON && (rx.byte1 & 0x0F) < 16 && rx.byte3 != 0x00 && rx.byte3 < 128) {
+      packets[index] = rx;
+      index++;
+    }
+  } while (millis() - start < 30000L && index < NUMBER_OF_BUTTONS);
+}
+
+void clearBuffer() {
+  while (MidiUSB.read().header != 0) {
+    ;
+  }
+}
+
+void noteOn(ButtonSetting buttonSetting) {
+  midiEventPacket_t noteOnPacket;
+  noteOnPacket.header = USB_CABLE_NUMBER | (MIDI_NOTE_ON >> 4);
+  noteOnPacket.byte1 = MIDI_NOTE_ON | buttonSetting.channel;
+  noteOnPacket.byte2 = buttonSetting.pitch;
+  noteOnPacket.byte3 = MIDI_NOTE_ON_VELOCITY;
+  MidiUSB.sendMIDI(noteOnPacket);
   MidiUSB.flush();
 }
 
-void noteOn(uint8_t pitch) {
-  midiEventPacket_t noteOnPacket;
-  noteOnPacket.header = USB_CABLE_NUMBER | (MIDI_NOTE_ON >> 4);
-  noteOnPacket.byte1 = MIDI_NOTE_ON | CHANNEL;
-  noteOnPacket.byte2 = pitch;
-  noteOnPacket.byte3 = MIDI_NOTE_ON_VELOCITY;
-  MidiUSB.sendMIDI(noteOnPacket);
-}
-
-void noteOff(uint8_t pitch) {
+void noteOff(ButtonSetting buttonSetting) {
   midiEventPacket_t noteOffPacket;
   noteOffPacket.header = USB_CABLE_NUMBER | (MIDI_NOTE_OFF >> 4);
-  noteOffPacket.byte1 = MIDI_NOTE_OFF | CHANNEL;
-  noteOffPacket.byte2 = pitch;
+  noteOffPacket.byte1 = MIDI_NOTE_OFF | buttonSetting.channel;
+  noteOffPacket.byte2 = buttonSetting.pitch;
   noteOffPacket.byte3 = MIDI_NOTE_OFF_VELOCITY;
   MidiUSB.sendMIDI(noteOffPacket);
+  MidiUSB.flush();
 }
 
