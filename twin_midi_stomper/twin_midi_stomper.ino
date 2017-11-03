@@ -25,7 +25,7 @@ ButtonSetting buttonSettings[NUMBER_OF_BUTTONS];
 unsigned long holdStart = 0;
 
 void setup() {
-  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (unsigned int i = 0; i < NUMBER_OF_BUTTONS; i++) {
     pinMode(i + FIRST_PIN, INPUT_PULLUP);
     buttons[i] = Bounce();
     buttons[i].attach(i + FIRST_PIN);
@@ -47,13 +47,13 @@ void setup() {
 }
 
 void updateButtons() {
-  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (unsigned int i = 0; i < NUMBER_OF_BUTTONS; i++) {
     buttons[i].update();
   }
 }
 
 bool allButtonsLow() {
-  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (unsigned int i = 0; i < NUMBER_OF_BUTTONS; i++) {
     if (buttons[i].read()) {
       return false;
     }
@@ -62,13 +62,13 @@ bool allButtonsLow() {
 }
 
 void loadFromEEPROM() {
-  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (unsigned int i = 0; i < NUMBER_OF_BUTTONS; i++) {
     EEPROM.get(sizeof(buttonSettings[i]) * i, buttonSettings[i]);
   }
 }
 
 bool validSettings() {
-  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (unsigned int i = 0; i < NUMBER_OF_BUTTONS; i++) {
     if (buttonSettings[i].channel > 16 && buttonSettings[i].pitch > 127) {
       return false;
     }
@@ -77,7 +77,7 @@ bool validSettings() {
 }
 
 void resetToDefault() {
-  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (unsigned int i = 0; i < NUMBER_OF_BUTTONS; i++) {
     buttonSettings[i].channel = CHANNEL;
     buttonSettings[i].pitch = BUTTON_0_PITCH + i;
   }
@@ -107,7 +107,7 @@ void loop() {
     holdStart = 0;
   }
 
-  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (unsigned int i = 0; i < NUMBER_OF_BUTTONS; i++) {
     if (buttons[i].fell()) {
       noteOn(buttonSettings[i]);
     } else if (buttons[i].rose()) {
@@ -120,7 +120,7 @@ void loop() {
 
 void reprogramPitches() {
   midiEventPacket_t packets[NUMBER_OF_BUTTONS];
-  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (unsigned int i = 0; i < NUMBER_OF_BUTTONS; i++) {
     noteOff(buttonSettings[i]);
     packets[i].header = 0;
   }
@@ -134,7 +134,7 @@ void reprogramPitches() {
 }
 
 void copyToSettings(midiEventPacket_t packets[]) {
-  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (unsigned int i = 0; i < NUMBER_OF_BUTTONS; i++) {
     buttonSettings[i].channel = packets[i].byte1 & 0x0F;
     buttonSettings[i].pitch = packets[i].byte2;
   }
@@ -142,14 +142,15 @@ void copyToSettings(midiEventPacket_t packets[]) {
 
 void playTestNotes() {
   delay(500);
-  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
-    noteOn(buttonSettings[0]);  delay(250);
+  for (unsigned int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    noteOn(buttonSettings[i]);
+    delay(250);
   }
   delay(250);
 }
 
 bool allPacketsHaveNonZeroHeader(midiEventPacket_t packets[]) {
-  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (unsigned int i = 0; i < NUMBER_OF_BUTTONS; i++) {
     if (packets[i].header == 0) {
       return false;
     }
@@ -160,7 +161,7 @@ bool allPacketsHaveNonZeroHeader(midiEventPacket_t packets[]) {
 void waitForPackets(midiEventPacket_t packets[]) {
   unsigned long start = millis();
   delay(5);
-  int index = 0;
+  unsigned int index = 0;
   do {
     delay(5);
     midiEventPacket_t rx = MidiUSB.read();
