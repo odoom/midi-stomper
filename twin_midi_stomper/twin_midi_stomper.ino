@@ -168,7 +168,6 @@ bool allPacketsHaveNonZeroHeader(midiEventPacket_t packets[]) {
 
 void waitForPackets(midiEventPacket_t packets[]) {
   unsigned long start = millis();
-  delay(5);
   uint8_t index = 0;
   do {
     delay(5);
