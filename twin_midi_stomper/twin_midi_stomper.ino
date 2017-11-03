@@ -32,6 +32,8 @@ void setup() {
   while (!Serial) {
     ;
   }
+
+  Serial.println("Setup start");
   pinMode(2, INPUT_PULLUP);
   button0.attach(2);
   button1.interval(1);
@@ -45,15 +47,15 @@ void setup() {
   buttonSetting0.pitch = BUTTON0_PITCH;
   buttonSetting1.pitch = BUTTON1_PITCH;
 
-  Serial.println("Setup Complete");
   printStatus();
+  Serial.println("Setup Complete");
 }
 
 void printStatus() {
-  Serial.println("buttonSetting0.channel:" + String(buttonSetting0.channel));
-  Serial.println("buttonSetting0.pitch:" + String(buttonSetting0.pitch));
-  Serial.println("buttonSetting1.channel:" + String(buttonSetting1.channel));
-  Serial.println("buttonSetting1.pitch:" + String(buttonSetting1.pitch));
+  Serial.println("buttonSetting0.channel: 0x" + String(buttonSetting0.channel, HEX));
+  Serial.println("buttonSetting0.pitch: 0x" + String(buttonSetting0.pitch, HEX));
+  Serial.println("buttonSetting1.channel: 0x" + String(buttonSetting1.channel, HEX));
+  Serial.println("buttonSetting1.pitch: 0x" + String(buttonSetting1.pitch, HEX));
   Serial.println("button0.read():" + String(button0.read()));
   Serial.println("button1.read():" + String(button1.read()));
 }
@@ -89,23 +91,22 @@ void loop() {
 void reprogramPitches() {
   midiEventPacket_t packet0 = waitForPacket();
   midiEventPacket_t packet1 = waitForPacket();
-  if (packet0.header != 0 && packet1.header != 0) {
-    buttonSetting0.channel = packet0.byte1 << 4;
-    buttonSetting0.channel = packet0.byte2;
-    buttonSetting1.channel = packet1.byte1 << 4;
-    buttonSetting1.channel = packet1.byte2;
-  }
+  //  if (packet0.header != 0 && packet1.header != 0) {
+  //    buttonSetting0.channel = packet0.byte1 | 0x0011;
+  //    buttonSetting0.pitch = packet0.byte2;
+  //    buttonSetting1.channel = packet1.byte1 | 0x0011;
+  //    buttonSetting1.pitch = packet1.byte2;
+  //  }
 }
 
 midiEventPacket_t waitForPacket() {
   midiEventPacket_t rx;
-  Serial.println("waitForPacket() entry rx.header:" + String(rx.header));
-  while (rx.header == 0) {
+  while (rx.header == 0 && (rx.byte1 & 0xF0) != MIDI_NOTE_ON) {
     rx = MidiUSB.read();
   }
-  Serial.println("rx.header USB_CABLE_NUMBER:" + String(rx.header | USB_CABLE_NUMBER, HEX));
-  Serial.println("rx.header MIDI_NOTE_ON:" + String(rx.header | MIDI_NOTE_ON, HEX));
-  Serial.println("waitForPacket() return rx.header:" + String(rx.header, HEX));
+  Serial.println("waitForPacket()   byte1: 0x" + String(rx.byte1, HEX));
+  Serial.println("waitForPacket() channel: 0x" + String(rx.byte1 & 0x0F, HEX));
+  Serial.println("waitForPacket()   pitch: 0x" + String(rx.byte2, HEX));
   return rx;
 }
 
