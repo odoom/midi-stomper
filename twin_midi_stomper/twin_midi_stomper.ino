@@ -170,9 +170,13 @@ void waitForPackets(midiEventPacket_t packets[]) {
   unsigned long start = millis();
   uint8_t index = 0;
   do {
-    delay(5);
+    delay(5); //not sure why this is needed but it helps
     midiEventPacket_t rx = MidiUSB.read();
-    if (rx.header != 0 && (rx.byte1 & 0xF0) == MIDI_NOTE_ON && (rx.byte1 & 0x0F) < 16 && rx.byte3 != 0x00 && rx.byte2 < 128) {
+    if (rx.header != 0 && // non zero header
+        (rx.byte1 & 0xF0) == MIDI_NOTE_ON && // first byte is a note on
+        (rx.byte1 & 0x0F) < 16 && // last byte is a valid channel
+        rx.byte3 != 0x00 && // velocity is not zero
+        rx.byte2 < 128) { // pitch is valid
       packets[index] = rx;
       index++;
     }
