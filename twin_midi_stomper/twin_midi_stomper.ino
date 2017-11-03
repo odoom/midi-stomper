@@ -6,12 +6,13 @@
 
 const uint8_t CHANNEL = 10 - 1;
 const uint8_t BUTTON_0_PITCH = pitchC2;
-const uint8_t BUTTON_1_PITCH = pitchD2b;
 const uint8_t MIDI_NOTE_ON_VELOCITY = 0x7F;
 const uint8_t MIDI_NOTE_OFF_VELOCITY = 0x00;
 const uint8_t MIDI_NOTE_ON = 0x90;
 const uint8_t MIDI_NOTE_OFF = 0x80;
 const uint8_t USB_CABLE_NUMBER = 0x00;
+const unsigned int NUMBER_OF_BUTTONS = 2;
+const unsigned int FIRST_PIN = 2;
 
 typedef struct
 {
@@ -19,46 +20,67 @@ typedef struct
   uint8_t pitch;
 } ButtonSetting;
 
-Bounce buttons[2];
-ButtonSetting buttonSettings[2];
+Bounce buttons[NUMBER_OF_BUTTONS];
+ButtonSetting buttonSettings[NUMBER_OF_BUTTONS];
 unsigned long holdStart = 0;
 
 void setup() {
-  pinMode(2, INPUT_PULLUP);
-  pinMode(3, INPUT_PULLUP);
-
-  buttons[0] = Bounce();
-  buttons[0].attach(2);
-  buttons[0].interval(1);
-
-  buttons[1] = Bounce();
-  buttons[1].attach(3);
-  buttons[1].interval(1);
+  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    pinMode(i + FIRST_PIN, INPUT_PULLUP);
+    buttons[i] = Bounce();
+    buttons[i].attach(i + FIRST_PIN);
+    buttons[i].interval(1);
+  }
 
   delay(1000);
-  buttons[0].update();
-  buttons[1].update();
+  updateButtons();
 
-  if (!buttons[0].read() && !buttons[1].read()) {
+  if (allButtonsLow()) {
     resetToDefault();
   } else {
-    EEPROM.get(0, buttonSettings[0]);
-    EEPROM.get(sizeof(buttonSettings[0]), buttonSettings[1]);
-    if (!(buttonSettings[0].channel < 16 &&
-          buttonSettings[1].channel < 16 &&
-          buttonSettings[0].pitch < 128 &&
-          buttonSettings[1].pitch < 128)) {
+    loadFromEEPROM();
+    if (!validSettings()) {
       resetToDefault();
+      saveButtonSettings();
     }
   }
 }
 
+void updateButtons() {
+  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    buttons[i].update();
+  }
+}
+
+bool allButtonsLow() {
+  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    if (buttons[i].read()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void loadFromEEPROM() {
+  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    EEPROM.get(sizeof(buttonSettings[i]) * i, buttonSettings[i]);
+  }
+}
+
+bool validSettings() {
+  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    if (buttonSettings[i].channel > 16 && buttonSettings[i].pitch > 127) {
+      return false;
+    }
+  }
+  return true;
+}
+
 void resetToDefault() {
-  buttonSettings[0].channel = CHANNEL;
-  buttonSettings[1].channel = CHANNEL;
-  buttonSettings[0].pitch = BUTTON_0_PITCH;
-  buttonSettings[1].pitch = BUTTON_1_PITCH;
-  saveButtonSettings();
+  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    buttonSettings[i].channel = CHANNEL;
+    buttonSettings[i].pitch = BUTTON_0_PITCH + i;
+  }
 }
 
 void saveButtonSettings() {
@@ -67,77 +89,86 @@ void saveButtonSettings() {
 }
 
 void loop() {
-  buttons[0].update();
-  buttons[1].update();
+  updateButtons();
 
-  if (holdStart != 0 && (millis() - holdStart) > 2000) {
-    // buttons have been held for 2 seconds
-    holdStart = 0;
-    reprogramPitches();
-  } else if ((buttons[0].fell() && !buttons[1].read()) || (buttons[1].fell() && !buttons[0].read())) {
-    // start waiting period
-    holdStart = millis();
-  } else if (!buttons[0].read() && !buttons[1].read()) {
-    // buttons are depressed, just wait
-    ;
+  if (allButtonsLow()) {
+    if (holdStart == 0) {
+      //start waiting
+      holdStart = millis();
+    } else if ((millis() - holdStart) > 2000) {
+      // waited long enough
+      holdStart = 0;
+      reprogramPitches();
+    } else {
+      // wait longer
+    }
   } else {
-    // set counter to 0, one or none buttons pressed
+    // set counter to 0, not all buttons pressed
     holdStart = 0;
   }
 
-  if (buttons[0].fell()) {
-    noteOn(buttonSettings[0]);
-  } else if (buttons[0].rose()) {
-    noteOff(buttonSettings[0]);
-  }
-
-  if (buttons[1].fell()) {
-    noteOn(buttonSettings[1]);
-  } else if (buttons[1].rose()) {
-    noteOff(buttonSettings[1]);
+  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    if (buttons[i].fell()) {
+      noteOn(buttonSettings[i]);
+    } else if (buttons[i].rose()) {
+      noteOff(buttonSettings[i]);
+    }
   }
 
   clearBuffer();
 }
 
 void reprogramPitches() {
-  noteOff(buttonSettings[0]);
-  noteOff(buttonSettings[1]);
+  midiEventPacket_t packets[NUMBER_OF_BUTTONS];
+  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    noteOff(buttonSettings[i]);
+    packets[i].header = 0;
+  }
   clearBuffer();
-  midiEventPacket_t packets[2];
-  packets[0].header = 0;
-  packets[1].header = 0;
-  waitForPackets(packets, 2);
-  if (packets[0].header != 0 && packets[1].header != 0) {
-    buttonSettings[0].channel = packets[0].byte1 & 0x0F;
-    buttonSettings[0].pitch = packets[0].byte2;
-    buttonSettings[1].channel = packets[1].byte1 & 0x0F;
-    buttonSettings[1].pitch = packets[1].byte2;
+  waitForPackets(packets);
+  if (allPacketsHaveNonZeroHeader(packets)) {
+    copyToSettings(packets);
     saveButtonSettings();
   }
   playTestNotes();
 }
 
+void copyToSettings(midiEventPacket_t packets[]) {
+  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    buttonSettings[i].channel = packets[i].byte1 & 0x0F;
+    buttonSettings[i].pitch = packets[i].byte2;
+  }
+}
+
 void playTestNotes() {
   delay(500);
-  noteOn(buttonSettings[0]);
-  delay(250);
-  noteOn(buttonSettings[1]);
+  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    noteOn(buttonSettings[0]);  delay(250);
+  }
   delay(250);
 }
 
-void waitForPackets(midiEventPacket_t packets[], int arrayLength) {
+bool allPacketsHaveNonZeroHeader(midiEventPacket_t packets[]) {
+  for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    if (packets[i].header == 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void waitForPackets(midiEventPacket_t packets[]) {
   unsigned long start = millis();
   delay(5);
   int index = 0;
   do {
     delay(5);
     midiEventPacket_t rx = MidiUSB.read();
-    if (rx.header != 0 && (rx.byte1 & 0xF0) == MIDI_NOTE_ON && rx.byte3 != 0x00) {
+    if (rx.header != 0 && (rx.byte1 & 0xF0) == MIDI_NOTE_ON && (rx.byte1 & 0x0F) < 16 && rx.byte3 != 0x00 && rx.byte3 < 128) {
       packets[index] = rx;
       index++;
     }
-  } while (millis() - start < 30000L && index < arrayLength);
+  } while (millis() - start < 30000L && index < NUMBER_OF_BUTTONS);
 }
 
 void clearBuffer() {
