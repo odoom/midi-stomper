@@ -4,13 +4,9 @@
 #include <MIDIUSB.h>
 #include "pitchToNote.h"
 
-
-// Configuration
 const uint8_t CHANNEL = 10 - 1;
-const uint8_t BUTTON0_PITCH = pitchC2;
-const uint8_t BUTTON1_PITCH = pitchD2b;
-
-// Less common configuration
+const uint8_t BUTTON_0_PITCH = pitchC2;
+const uint8_t BUTTON_1_PITCH = pitchD2b;
 const uint8_t MIDI_NOTE_ON_VELOCITY = 0x7F;
 const uint8_t MIDI_NOTE_OFF_VELOCITY = 0x00;
 const uint8_t MIDI_NOTE_ON = 0x90;
@@ -23,43 +19,45 @@ typedef struct
   uint8_t pitch;
 } ButtonSetting;
 
-// Buttons
-Bounce button0 = Bounce();
-Bounce button1 = Bounce();
-
+Bounce buttons[2];
 ButtonSetting buttonSettings[2];
-
 unsigned long holdStart = 0;
 
 void setup() {
-  Serial.begin(9600);
-  while (!Serial) ;
-
   pinMode(2, INPUT_PULLUP);
-  button0.attach(2);
-  button1.interval(1);
-
   pinMode(3, INPUT_PULLUP);
-  button1.attach(3);
-  button1.interval(1);
 
-  EEPROM.get(0, buttonSettings[0]);
-  EEPROM.get(sizeof(buttonSettings[0]), buttonSettings[1]);
-  if (!(buttonSettings[0].channel < 16 &&
-        buttonSettings[1].channel < 16 &&
-        buttonSettings[0].pitch < 128 &&
-        buttonSettings[1].pitch < 128)) {
-    //make reset function here
+  buttons[0] = Bounce();
+  buttons[0].attach(2);
+  buttons[0].interval(1);
+
+  buttons[1] = Bounce();
+  buttons[1].attach(3);
+  buttons[1].interval(1);
+
+  delay(1000);
+  buttons[0].update();
+  buttons[1].update();
+
+  if (!buttons[0].read() && !buttons[1].read()) {
     resetToDefault();
+  } else {
+    EEPROM.get(0, buttonSettings[0]);
+    EEPROM.get(sizeof(buttonSettings[0]), buttonSettings[1]);
+    if (!(buttonSettings[0].channel < 16 &&
+          buttonSettings[1].channel < 16 &&
+          buttonSettings[0].pitch < 128 &&
+          buttonSettings[1].pitch < 128)) {
+      resetToDefault();
+    }
   }
-  resetToDefault();
 }
 
 void resetToDefault() {
   buttonSettings[0].channel = CHANNEL;
   buttonSettings[1].channel = CHANNEL;
-  buttonSettings[0].pitch = BUTTON0_PITCH;
-  buttonSettings[1].pitch = BUTTON1_PITCH;
+  buttonSettings[0].pitch = BUTTON_0_PITCH;
+  buttonSettings[1].pitch = BUTTON_1_PITCH;
   saveButtonSettings();
 }
 
@@ -69,17 +67,17 @@ void saveButtonSettings() {
 }
 
 void loop() {
-  button0.update();
-  button1.update();
+  buttons[0].update();
+  buttons[1].update();
 
   if (holdStart != 0 && (millis() - holdStart) > 2000) {
     // buttons have been held for 2 seconds
     holdStart = 0;
     reprogramPitches();
-  } else if ((button0.fell() && !button1.read()) || (button1.fell() && !button0.read())) {
+  } else if ((buttons[0].fell() && !buttons[1].read()) || (buttons[1].fell() && !buttons[0].read())) {
     // start waiting period
     holdStart = millis();
-  } else if (!button0.read() && !button1.read()) {
+  } else if (!buttons[0].read() && !buttons[1].read()) {
     // buttons are depressed, just wait
     ;
   } else {
@@ -87,15 +85,15 @@ void loop() {
     holdStart = 0;
   }
 
-  if (button0.fell()) {
+  if (buttons[0].fell()) {
     noteOn(buttonSettings[0]);
-  } else if (button0.rose()) {
+  } else if (buttons[0].rose()) {
     noteOff(buttonSettings[0]);
   }
 
-  if (button1.fell()) {
+  if (buttons[1].fell()) {
     noteOn(buttonSettings[1]);
-  } else if (button1.rose()) {
+  } else if (buttons[1].rose()) {
     noteOff(buttonSettings[1]);
   }
 
@@ -107,6 +105,8 @@ void reprogramPitches() {
   noteOff(buttonSettings[1]);
   clearBuffer();
   midiEventPacket_t packets[2];
+  packets[0].header = 0;
+  packets[1].header = 0;
   waitForPackets(packets, 2);
   if (packets[0].header != 0 && packets[1].header != 0) {
     buttonSettings[0].channel = packets[0].byte1 & 0x0F;
@@ -137,7 +137,7 @@ void waitForPackets(midiEventPacket_t packets[], int arrayLength) {
       packets[index] = rx;
       index++;
     }
-  } while (millis() - start < 10000L && index < arrayLength);
+  } while (millis() - start < 30000L && index < arrayLength);
 }
 
 void clearBuffer() {
