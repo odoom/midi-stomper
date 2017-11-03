@@ -26,14 +26,9 @@ Bounce button1 = Bounce();
 
 ButtonSetting buttonSetting0;
 ButtonSetting buttonSetting1;
+unsigned long holdStart = 0;
 
 void setup() {
-  Serial.begin(115200);
-  while (!Serial) {
-    ;
-  }
-
-  Serial.println("Setup start");
   pinMode(2, INPUT_PULLUP);
   button0.attach(2);
   button1.interval(1);
@@ -46,32 +41,24 @@ void setup() {
   buttonSetting1.channel = CHANNEL;
   buttonSetting0.pitch = BUTTON0_PITCH;
   buttonSetting1.pitch = BUTTON1_PITCH;
-
-  printStatus();
-  Serial.println("Setup Complete");
 }
-
-void printStatus() {
-  Serial.println("buttonSetting0.channel: 0x" + String(buttonSetting0.channel, HEX));
-  Serial.println("buttonSetting0.pitch: 0x" + String(buttonSetting0.pitch, HEX));
-  Serial.println("buttonSetting1.channel: 0x" + String(buttonSetting1.channel, HEX));
-  Serial.println("buttonSetting1.pitch: 0x" + String(buttonSetting1.pitch, HEX));
-  Serial.println("button0.read():" + String(button0.read()));
-  Serial.println("button1.read():" + String(button1.read()));
-}
-
 
 void loop() {
   button0.update();
   button1.update();
 
-  if ((button0.fell() && !button1.read()) || (button1.fell() && !button0.read())) {
-    Serial.println("reprogramPitches");
-    noteOff(buttonSetting0);
-    noteOff(buttonSetting1);
+  if (holdStart != 0 && (millis() - holdStart) > 2000) {
+    // buttons have been held for 2 seconds
+    holdStart = 0;
     reprogramPitches();
-    Serial.println("reprogramPitches done");
+  } else if ((button0.fell() && !button1.read()) || (button1.fell() && !button0.read())) {
+    // start waiting period
+    holdStart = millis();
+  } else if (!button0.read() && !button1.read()) {
+    // buttons are depressed, just wait
+    ;
   } else {
+    holdStart = 0;
     if (button0.fell()) {
       noteOn(buttonSetting0);
     } else if (button0.rose()) {
@@ -84,16 +71,21 @@ void loop() {
       noteOff(buttonSetting1);
     }
   }
+
+  clearBuffer();
 }
 
 void reprogramPitches() {
+  noteOff(buttonSetting0);
+  noteOff(buttonSetting1);
   clearBuffer();
   midiEventPacket_t packet0 = waitForPacket();
+  clearBuffer();
   midiEventPacket_t packet1 = waitForPacket();
-      buttonSetting0.channel = packet0.byte1 & 0x0F;
-      buttonSetting0.pitch = packet0.byte2;
-      buttonSetting1.channel = packet1.byte1 & 0x0F;
-      buttonSetting1.pitch = packet1.byte2;
+  buttonSetting0.channel = packet0.byte1 & 0x0F;
+  buttonSetting0.pitch = packet0.byte2;
+  buttonSetting1.channel = packet1.byte1 & 0x0F;
+  buttonSetting1.pitch = packet1.byte2;
 }
 
 midiEventPacket_t waitForPacket() {
@@ -101,18 +93,13 @@ midiEventPacket_t waitForPacket() {
   while (rx.header == 0 || (rx.byte1 & 0xF0) != MIDI_NOTE_ON || rx.byte3 == 0x00) {
     rx = MidiUSB.read();
   }
-  Serial.println("waitForPacket()   byte1: 0x" + String(rx.byte1, HEX));
-  Serial.println("waitForPacket() channel: 0x" + String(rx.byte1 & 0x0F, HEX));
-  Serial.println("waitForPacket()   pitch: 0x" + String(rx.byte2, HEX));
   return rx;
 }
 
 void clearBuffer() {
-  unsigned long loops = 0;
   while (MidiUSB.read().header != 0) {
-    loops++;
+    ;
   }
-  Serial.println("clearBuffer() loops:" + String(loops));
 }
 
 void noteOn(ButtonSetting buttonSetting) {
