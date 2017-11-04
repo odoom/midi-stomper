@@ -1,3 +1,5 @@
+## Copyright (c) 2017 Jonathan S. Fisher
+# Subject to terms and conditions provided in LICENSE.md
 
 #include <Bounce2.h>
 #include <EEPROM.h>
