@@ -1,5 +1,7 @@
-## Copyright (c) 2017 Jonathan S. Fisher
-# Subject to terms and conditions provided in LICENSE.md
+// Copyright (c) 2017 Jonathan S. Fisher
+// Subject to terms and conditions provided in LICENSE.md
+
+const String COPYRIGHT_NOTICE = "Copyright (c) 2017 Jonathan S. Fisher. Subject to terms and conditions provided in https://github.com/odoom/midi-stomper/edit/master/LICENSE.md";
 
 #include <Bounce2.h>
 #include <EEPROM.h>
