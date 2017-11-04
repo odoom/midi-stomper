@@ -4,20 +4,20 @@
 #include <MIDIUSB.h>
 #include "pitchToNote.h"
 
-const uint8_t CHANNEL = 0x09;
-const uint8_t BUTTON_0_PITCH = pitchC2;
-const uint8_t MIDI_NOTE_ON_VELOCITY = 0x7F;
-const uint8_t MIDI_NOTE_OFF_VELOCITY = 0x00;
-const uint8_t MIDI_NOTE_ON = 0x90;
-const uint8_t MIDI_NOTE_OFF = 0x80;
-const uint8_t USB_CABLE_NUMBER = 0x00;
-const uint8_t NUMBER_OF_BUTTONS = 2;
-const uint8_t FIRST_PIN = 2;
+const byte CHANNEL = 0x09;
+const byte BUTTON_0_PITCH = pitchC2;
+const byte MIDI_NOTE_ON_VELOCITY = 0x7F;
+const byte MIDI_NOTE_OFF_VELOCITY = 0x00;
+const byte MIDI_NOTE_ON = 0x90;
+const byte MIDI_NOTE_OFF = 0x80;
+const byte USB_CABLE_NUMBER = 0x00;
+const byte NUMBER_OF_BUTTONS = 2;
+const byte FIRST_PIN = 2;
 
 typedef struct
 {
-  uint8_t channel;
-  uint8_t pitch;
+  byte channel;
+  byte pitch;
 } ButtonSetting;
 
 Bounce buttons[NUMBER_OF_BUTTONS];
@@ -26,7 +26,7 @@ unsigned long holdStart = 0;
 bool firstLoop = true;
 
 void setup() {
-  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (byte i = 0; i < NUMBER_OF_BUTTONS; i++) {
     pinMode(i + FIRST_PIN, INPUT_PULLUP);
     buttons[i] = Bounce();
     buttons[i].attach(i + FIRST_PIN);
@@ -41,14 +41,14 @@ void setup() {
 
 void loadFromEEPROM() {
   int location = 0;
-  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (byte i = 0; i < NUMBER_OF_BUTTONS; i++) {
     EEPROM.get(location, buttonSettings[i]);
     location += sizeof(buttonSettings[0]);
   }
 }
 
 bool validSettings() {
-  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (byte i = 0; i < NUMBER_OF_BUTTONS; i++) {
     if (buttonSettings[i].channel > 16 || buttonSettings[i].pitch > 127) {
       return false;
     }
@@ -57,7 +57,7 @@ bool validSettings() {
 }
 
 void resetToDefault() {
-  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (byte i = 0; i < NUMBER_OF_BUTTONS; i++) {
     buttonSettings[i].channel = CHANNEL;
     buttonSettings[i].pitch = BUTTON_0_PITCH + i;
   }
@@ -90,7 +90,7 @@ void loop() {
       holdStart = 0;
     }
 
-    for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    for (byte i = 0; i < NUMBER_OF_BUTTONS; i++) {
       if (buttons[i].fell()) {
         noteOn(buttonSettings[i]);
       } else if (buttons[i].rose()) {
@@ -104,13 +104,13 @@ void loop() {
 }
 
 void updateButtons() {
-  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (byte i = 0; i < NUMBER_OF_BUTTONS; i++) {
     buttons[i].update();
   }
 }
 
 bool allButtonsLow() {
-  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (byte i = 0; i < NUMBER_OF_BUTTONS; i++) {
     if (buttons[i].read()) {
       return false;
     }
@@ -120,7 +120,7 @@ bool allButtonsLow() {
 
 void saveButtonSettings() {
   int location = 0;
-  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (byte i = 0; i < NUMBER_OF_BUTTONS; i++) {
     EEPROM.put(location, buttonSettings[i]);
     location += sizeof(buttonSettings[0]);
   }
@@ -128,7 +128,7 @@ void saveButtonSettings() {
 
 void reprogramButtons() {
   midiEventPacket_t packets[NUMBER_OF_BUTTONS];
-  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (byte i = 0; i < NUMBER_OF_BUTTONS; i++) {
     noteOff(buttonSettings[i]);
     packets[i].header = 0;
   }
@@ -149,13 +149,13 @@ void clearBuffer() {
 
 void waitForPackets(midiEventPacket_t packets[]) {
   unsigned long start = millis();
-  uint8_t index = 0;
+  byte index = 0;
   do {
     delay(5); //not sure why this is needed but it helps
     midiEventPacket_t rx = MidiUSB.read();
     if (rx.header != 0 && // non zero header
-        (rx.byte1 & 0xF0) == MIDI_NOTE_ON && // first byte is a note on
-        (rx.byte1 & 0x0F) < 16 && // last byte is a valid channel
+        (rx.byte1 & 0xF0) == MIDI_NOTE_ON && // first nibble is a note on
+        (rx.byte1 & 0x0F) < 16 && // last nibble is a valid channel
         rx.byte3 != 0x00 && // velocity is not zero
         rx.byte2 < 128) { // pitch is valid
       packets[index] = rx;
@@ -165,7 +165,7 @@ void waitForPackets(midiEventPacket_t packets[]) {
 }
 
 bool allPacketsHaveNonZeroHeader(midiEventPacket_t packets[]) {
-  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (byte i = 0; i < NUMBER_OF_BUTTONS; i++) {
     if (packets[i].header == 0) {
       return false;
     }
@@ -174,7 +174,7 @@ bool allPacketsHaveNonZeroHeader(midiEventPacket_t packets[]) {
 }
 
 void copyToSettings(midiEventPacket_t packets[]) {
-  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (byte i = 0; i < NUMBER_OF_BUTTONS; i++) {
     buttonSettings[i].channel = packets[i].byte1 & 0x0F;
     buttonSettings[i].pitch = packets[i].byte2;
   }
@@ -182,7 +182,7 @@ void copyToSettings(midiEventPacket_t packets[]) {
 
 void playTestNotes() {
   delay(500);
-  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+  for (byte i = 0; i < NUMBER_OF_BUTTONS; i++) {
     noteOn(buttonSettings[i]);
     delay(250);
   }
