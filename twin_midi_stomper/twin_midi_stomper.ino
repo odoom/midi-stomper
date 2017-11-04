@@ -4,7 +4,7 @@
 #include <MIDIUSB.h>
 #include "pitchToNote.h"
 
-const uint8_t CHANNEL = 10 - 1;
+const uint8_t CHANNEL = 0x09;
 const uint8_t BUTTON_0_PITCH = pitchC2;
 const uint8_t MIDI_NOTE_ON_VELOCITY = 0x7F;
 const uint8_t MIDI_NOTE_OFF_VELOCITY = 0x00;
