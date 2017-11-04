@@ -49,7 +49,8 @@ void loadFromEEPROM() {
 
 bool validSettings() {
   for (byte i = 0; i < NUMBER_OF_BUTTONS; i++) {
-    if (buttonSettings[i].channel > 16 || buttonSettings[i].pitch > 127) {
+    if (buttonSettings[i].channel > 0x0F || // MIDI Max Channel is 16
+        buttonSettings[i].pitch > 0x7F) { // MIDI Max Velocity is 127
       return false;
     }
   }
@@ -155,7 +156,6 @@ void waitForPackets(midiEventPacket_t packets[]) {
     midiEventPacket_t rx = MidiUSB.read();
     if (rx.header != 0 && // non zero header
         (rx.byte1 & 0xF0) == MIDI_NOTE_ON && // first nibble is a note on
-        (rx.byte1 & 0x0F) < 16 && // last nibble is a valid channel
         rx.byte3 != 0x00 && // velocity is not zero
         rx.byte2 < 128) { // pitch is valid
       packets[index] = rx;
