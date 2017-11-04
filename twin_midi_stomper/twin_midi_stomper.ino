@@ -5,14 +5,14 @@
 #include "pitchToNote.h"
 
 const byte CHANNEL = 0x09;
-const byte BUTTON_0_PITCH = pitchC2;
 const byte MIDI_NOTE_ON_VELOCITY = 0x7F;
 const byte MIDI_NOTE_OFF_VELOCITY = 0x00;
 const byte MIDI_NOTE_ON = 0x90;
 const byte MIDI_NOTE_OFF = 0x80;
 const byte USB_CABLE_NUMBER = 0x00;
+const byte BUTTON_0_PITCH = pitchC2;
+const byte BUTTON_0_PIN = 2;
 const byte NUMBER_OF_BUTTONS = 2;
-const byte FIRST_PIN = 2;
 
 typedef struct
 {
@@ -27,9 +27,9 @@ bool firstLoop = true;
 
 void setup() {
   for (byte i = 0; i < NUMBER_OF_BUTTONS; i++) {
-    pinMode(i + FIRST_PIN, INPUT_PULLUP);
+    pinMode(i + BUTTON_0_PIN, INPUT_PULLUP);
     buttons[i] = Bounce();
-    buttons[i].attach(i + FIRST_PIN);
+    buttons[i].attach(i + BUTTON_0_PIN);
     buttons[i].interval(1);
   }
 
