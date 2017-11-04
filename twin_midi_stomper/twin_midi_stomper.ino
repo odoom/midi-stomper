@@ -39,21 +39,6 @@ void setup() {
   }
 }
 
-void updateButtons() {
-  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
-    buttons[i].update();
-  }
-}
-
-bool allButtonsLow() {
-  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
-    if (buttons[i].read()) {
-      return false;
-    }
-  }
-  return true;
-}
-
 void loadFromEEPROM() {
   int location = 0;
   for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
@@ -75,14 +60,6 @@ void resetToDefault() {
   for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
     buttonSettings[i].channel = CHANNEL;
     buttonSettings[i].pitch = BUTTON_0_PITCH + i;
-  }
-}
-
-void saveButtonSettings() {
-  int location = 0;
-  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
-    EEPROM.put(location, buttonSettings[i]);
-    location += sizeof(buttonSettings[0]);
   }
 }
 
@@ -126,6 +103,29 @@ void loop() {
   clearBuffer();
 }
 
+void updateButtons() {
+  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    buttons[i].update();
+  }
+}
+
+bool allButtonsLow() {
+  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    if (buttons[i].read()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void saveButtonSettings() {
+  int location = 0;
+  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    EEPROM.put(location, buttonSettings[i]);
+    location += sizeof(buttonSettings[0]);
+  }
+}
+
 void reprogramButtons() {
   midiEventPacket_t packets[NUMBER_OF_BUTTONS];
   for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
@@ -141,29 +141,10 @@ void reprogramButtons() {
   playTestNotes();
 }
 
-void copyToSettings(midiEventPacket_t packets[]) {
-  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
-    buttonSettings[i].channel = packets[i].byte1 & 0x0F;
-    buttonSettings[i].pitch = packets[i].byte2;
+void clearBuffer() {
+  while (MidiUSB.read().header != 0) {
+    ;
   }
-}
-
-void playTestNotes() {
-  delay(500);
-  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
-    noteOn(buttonSettings[i]);
-    delay(250);
-  }
-  delay(250);
-}
-
-bool allPacketsHaveNonZeroHeader(midiEventPacket_t packets[]) {
-  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
-    if (packets[i].header == 0) {
-      return false;
-    }
-  }
-  return true;
 }
 
 void waitForPackets(midiEventPacket_t packets[]) {
@@ -183,10 +164,29 @@ void waitForPackets(midiEventPacket_t packets[]) {
   } while (millis() - start < 30000L && index < NUMBER_OF_BUTTONS);
 }
 
-void clearBuffer() {
-  while (MidiUSB.read().header != 0) {
-    ;
+bool allPacketsHaveNonZeroHeader(midiEventPacket_t packets[]) {
+  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    if (packets[i].header == 0) {
+      return false;
+    }
   }
+  return true;
+}
+
+void copyToSettings(midiEventPacket_t packets[]) {
+  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    buttonSettings[i].channel = packets[i].byte1 & 0x0F;
+    buttonSettings[i].pitch = packets[i].byte2;
+  }
+}
+
+void playTestNotes() {
+  delay(500);
+  for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+    noteOn(buttonSettings[i]);
+    delay(250);
+  }
+  delay(250);
 }
 
 void noteOn(ButtonSetting buttonSetting) {
