@@ -16,7 +16,8 @@ const byte MIDI_NOTE_OFF = 0x80;
 const byte USB_CABLE_NUMBER = 0x00;
 const byte BUTTON_0_PITCH = pitchC2;
 const byte BUTTON_0_PIN = 2;
-const byte NUMBER_OF_BUTTONS = 2;
+const byte NUMBER_OF_BUTTONS = 3;
+const byte BUTTON_DEBOUNCE_INTERVAL = 2;
 
 typedef struct
 {
@@ -34,7 +35,7 @@ void setup() {
     pinMode(i + BUTTON_0_PIN, INPUT_PULLUP);
     buttons[i] = Bounce();
     buttons[i].attach(i + BUTTON_0_PIN);
-    buttons[i].interval(1);
+    buttons[i].interval(BUTTON_DEBOUNCE_INTERVAL);
   }
 
   loadFromEEPROM();
@@ -143,12 +144,13 @@ void reprogramButtons() {
     copyToSettings(packets);
     saveButtonSettings();
   }
+  delay(500);
   playTestNotes();
 }
 
 void clearBuffer() {
-  while (MidiUSB.read().header != 0) {
-    ;
+  while (MidiUSB.available() > 0) {
+    MidiUSB.read();
   }
 }
 
@@ -185,12 +187,12 @@ void copyToSettings(midiEventPacket_t packets[]) {
 }
 
 void playTestNotes() {
-  delay(500);
   for (byte i = 0; i < NUMBER_OF_BUTTONS; i++) {
     noteOn(buttonSettings[i]);
-    delay(250);
+    delay(350);
+    noteOff(buttonSettings[i]);
+    delay(100);
   }
-  delay(250);
 }
 
 void noteOn(ButtonSetting buttonSetting) {
